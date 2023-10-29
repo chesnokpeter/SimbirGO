@@ -8,6 +8,7 @@ from fastapi_jwt_auth.exceptions import AuthJWTException
 from pydantic import BaseModel
 import inspect, re
 from typing import Literal
+from datetime import timedelta
 
 from models import User, BaseUser, AdminUser, BaseAdminUser, Transport, BaseTransport, AdminTransport, BaseAdminTransport, Rent, AdminRent, BaseAdminRent
 
@@ -63,6 +64,8 @@ class Settings(BaseModel):
     authjwt_secret_key: str = "2rewerf346t4tgdry3565ehs56hy"
     authjwt_denylist_enabled: bool = True
     authjwt_denylist_token_checks: set = {"access"}
+    authjwt_access_token_expires = timedelta(days=1)
+
 
 @AuthJWT.load_config
 def get_config():
@@ -89,12 +92,12 @@ def signup(base: BaseUser):
     a = user.signup()
     return JSONResponse(
         status_code=a[1],
-        content=a[0]
+        content={"msg" : a[0]}
     )
 
 
 @app.post('/api/Account/SignIn')
-def signin(base: BaseUser, Authorize: AuthJWT = Depends()):
+def signIn(base: BaseUser, Authorize: AuthJWT = Depends()):
     user = User(base.username, base.password)
     a = user.signin()
     if not a[2]: return JSONResponse(
@@ -105,29 +108,32 @@ def signin(base: BaseUser, Authorize: AuthJWT = Depends()):
     return {"access_token": access_token}
 
 @app.post('/api/Account/SignOut')
-def signout(Authorize: AuthJWT = Depends()):
+def signOut(Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     user = User(userjwt)
     a = user.signout()
-    if a:
+    if a[0]:
         jti = Authorize.get_raw_jwt()['jti']
         denylist.add(jti)
-        a = ['Выход произошён успешно', 200]
+        return JSONResponse(
+            status_code=200,
+            content={"msg":"Выход произошён успешно"}
+        )
     return JSONResponse(
-        status_code=a[1],
-        content=a[0]
+        status_code=a[2],
+        content={"msg":a[1]}
     )
 
 @app.get('/api/Account/Me')
-def getmeuser(Authorize: AuthJWT = Depends()):
+def getMeUser(Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
 
     current_user = Authorize.get_jwt_subject()
     return {"user": current_user}
 
 @app.put('/api/Account/Update')
-def updateuser(base: BaseUser, Authorize: AuthJWT = Depends()):
+def updateUser(base: BaseUser, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userusername = Authorize.get_jwt_subject()
     user = User(userusername)
@@ -139,68 +145,83 @@ def updateuser(base: BaseUser, Authorize: AuthJWT = Depends()):
 
 
 @app.get('/api/Admin/Account')
-def adminuserlist(start: int = 0, count: int = 0, Authorize: AuthJWT = Depends()):
+def adminUserList(start: int = 0, count: int = 0, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     adminuser = AdminUser(userjwt)
     a = adminuser.listuser(start, count)
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
+    return a
 
 @app.get('/api/Admin/Account/{id}')
-def userbyid(id: int = 0, Authorize: AuthJWT = Depends()):
+def userById(id: int = 0, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     adminuser = AdminUser(userjwt)
     a = adminuser.userbyid(id)
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
+    return a
 
 @app.post('/api/Admin/Account/')
-def addadminuser(base: BaseAdminUser, Authorize: AuthJWT = Depends()):
+def addAdminUser(base: BaseAdminUser, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     adminuser = AdminUser(userjwt)
     a = adminuser.adduseradmin(base.username, base.password, base.isAdmin, base.balance)
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
+    if a == 409: return JSONResponse( status_code=409, content={"msg":"Сущность уже создана"} )
+    return a
 
 @app.put('/api/Admin/Account/{id}')
-def addadminuser(base: BaseAdminUser, Authorize: AuthJWT = Depends(), id:int=0):
+def editAdminUserById(base: BaseAdminUser, Authorize: AuthJWT = Depends(), id:int=0):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     adminuser = AdminUser(userjwt)
     a = adminuser.edituseradmin(base.username, base.password, base.isAdmin, base.balance, id)
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
+    if a == 409: return JSONResponse( status_code=409, content={"msg":"Сущность уже создана"} )
+    return a
 
 @app.delete('/api/Admin/Account/{id}')
-def addadminuser(Authorize: AuthJWT = Depends(), id:int=0):
+def addAdminUser(Authorize: AuthJWT = Depends(), id:int=0):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     adminuser = AdminUser(userjwt)
     a = adminuser.deleteuseradmin(id)
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
+    return JSONResponse( status_code=200, content={"msg":"Сущность удалена успешно"} )
+
+
+
+
+
+
+
+
+@app.post('/api/Payment/Hesoyam/{accountId}')     # НЕДОДЕЛАННЫЙ
+def hesoyam(Authorize: AuthJWT = Depends(), accountId:int=0):
+    Authorize.jwt_required()
+    userjwt = Authorize.get_jwt_subject()
+    adminuser = AdminUser(userjwt)
+    a = adminuser.addbalance(accountId)
     return JSONResponse(
         status_code=a[1],
         content=a[0]
     )
 
+
+
+
+
+
 @app.get('/api/Transport/{id}')
-def gettransport(id:int=0):
+def getTransport(id:int):
     tr = Transport(id)
     a = tr.gettransportbyid()
     return a
 
 @app.put('/api/Transport/{id}')
-def puttransport(base: BaseTransport, Authorize: AuthJWT = Depends(), id:int=0):
+def putTransport(base: BaseTransport, Authorize: AuthJWT = Depends(), id:int=0):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     tr = Transport(userjwt)
@@ -217,24 +238,24 @@ def puttransport(base: BaseTransport, Authorize: AuthJWT = Depends(), id:int=0):
             base.dayPrice,
             id
         )
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не найден"} )
+    if a == 404: return JSONResponse( status_code=404, content={"msg":"Транспорт не найден"} )
+    if a == 400: return JSONResponse( status_code=400, content={"msg":"Транспорт не этого пользователя"} )
+    return a
 
 @app.delete('/api/Transport/{id}')
-def dettransport(Authorize: AuthJWT = Depends(), id:int=0):
+def deleteTransport(Authorize: AuthJWT = Depends(), id:int=0):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     tr = Transport(userjwt)
     a = tr.deletetransportbyid(id)
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не найден"} )
+    if a == 404: return JSONResponse( status_code=404, content={"msg":"Транспорт не найден"} )
+    if a == 400: return JSONResponse( status_code=400, content={"msg":"Транспорт не этого пользователя"} )
+    return JSONResponse( status_code=200, content={"msg":"Транспорт успешно удалён"} )
 
 @app.post('/api/Transport')
-def addtransport(base: BaseTransport, Authorize: AuthJWT = Depends()):
+def addTransport(base: BaseTransport, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     tr = Transport(userjwt)
@@ -250,26 +271,28 @@ def addtransport(base: BaseTransport, Authorize: AuthJWT = Depends()):
             base.minutePrice, 
             base.dayPrice,
         )
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не найден"} )
+    return a
 
 
-@app.post('/api/Payment/Hesoyam/{accountId}')
-def hesoyam(Authorize: AuthJWT = Depends(), accountId:int=0):
-    Authorize.jwt_required()
-    userjwt = Authorize.get_jwt_subject()
-    adminuser = AdminUser(userjwt)
-    a = adminuser.addbalance(accountId)
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+
+
+
+
+
+
+
+#ВОТ ТУТ Я ОСТАНОВИЛСЯ
+
+
+
+
+
+
 
 
 @app.get('/api/Admin/Transport')
-def admintransportlist(start: int = 0, count: int = 10, transportType:str = 'ALL', Authorize: AuthJWT = Depends()):
+def adminTransportList(start: int = 0, count: int = 10, transportType:str = 'ALL', Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     tr = AdminTransport(userjwt)
@@ -277,7 +300,7 @@ def admintransportlist(start: int = 0, count: int = 10, transportType:str = 'ALL
     return a
 
 @app.get('/api/Admin/Transport/{id}')
-def admintrbyid(id: int = 0, Authorize: AuthJWT = Depends()):
+def adminTrById(id: int = 0, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     tr = AdminTransport(userjwt)
@@ -288,7 +311,7 @@ def admintrbyid(id: int = 0, Authorize: AuthJWT = Depends()):
     )
 
 @app.post('/api/Admin/Transport')
-def addtransport(base: BaseAdminTransport, Authorize: AuthJWT = Depends()):
+def adminAddTransport(base: BaseAdminTransport, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     tr = AdminTransport(userjwt)
@@ -312,7 +335,7 @@ def addtransport(base: BaseAdminTransport, Authorize: AuthJWT = Depends()):
 
 
 @app.put('/api/Admin/Transport/{id}')
-def edittransport(base: BaseAdminTransport, Authorize: AuthJWT = Depends(), id: int = 0):
+def adminEditTransport(base: BaseAdminTransport, Authorize: AuthJWT = Depends(), id: int = 0):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     tr = AdminTransport(userjwt)
@@ -336,7 +359,7 @@ def edittransport(base: BaseAdminTransport, Authorize: AuthJWT = Depends(), id: 
     )
 
 @app.delete('/api/Admin/Transport/{id}')
-def dettransport(Authorize: AuthJWT = Depends(), id:int=0):
+def adminDeleteTransport(Authorize: AuthJWT = Depends(), id:int=0):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     tr = AdminTransport(userjwt)
@@ -348,14 +371,14 @@ def dettransport(Authorize: AuthJWT = Depends(), id:int=0):
 
 
 @app.get('/api/Rent/Transport')
-def rentlist(lat:float, long:float, radius:float, type:str):
+def rentList(lat:float, long:float, radius:float, type:str):
     rent = Rent()
     a = rent.rentrad(lat, long, radius, type)
     return a
 
 
 @app.post('/api/Rent/New/{transportId}')
-def newrent(rentType:Literal["Minutes", 'Days'], transportId:int, Authorize: AuthJWT = Depends()):
+def newRent(rentType:Literal["Minutes", 'Days'], transportId:int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = Rent(userjwt)
@@ -366,7 +389,7 @@ def newrent(rentType:Literal["Minutes", 'Days'], transportId:int, Authorize: Aut
     )
 
 @app.get('/api/Rent/{rentId}')
-def getinforentid(rentId:int, Authorize: AuthJWT = Depends()):
+def getInfoRentId(rentId:int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = Rent(userjwt)
@@ -374,7 +397,7 @@ def getinforentid(rentId:int, Authorize: AuthJWT = Depends()):
     return a
 
 @app.get('/api/RentMyHistory')
-def getmyrenthistory(Authorize: AuthJWT = Depends()):
+def getMyRentHistory(Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = Rent(userjwt)
@@ -382,7 +405,7 @@ def getmyrenthistory(Authorize: AuthJWT = Depends()):
     return a
 
 @app.get('/api/Rent/TransportHistory/{transportId}')
-def gettrhistory(transportId:int, Authorize: AuthJWT = Depends()):
+def getTrHistory(transportId:int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = Rent(userjwt)
@@ -390,7 +413,7 @@ def gettrhistory(transportId:int, Authorize: AuthJWT = Depends()):
     return a
 
 @app.post('/api/Rent/End/{rentid}')
-def endrent(rentid:int, lat:float, long:float, Authorize: AuthJWT = Depends()):
+def endRent(rentid:int, lat:float, long:float, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = Rent(userjwt)
@@ -401,7 +424,7 @@ def endrent(rentid:int, lat:float, long:float, Authorize: AuthJWT = Depends()):
     )
 
 @app.get('/api/Admin/Rent/{rentid}')
-def rentidinfoadmin(rentid:int, Authorize: AuthJWT = Depends()):
+def rentIdInfoAdmin(rentid:int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = AdminRent(userjwt)
@@ -409,7 +432,7 @@ def rentidinfoadmin(rentid:int, Authorize: AuthJWT = Depends()):
     return a
 
 @app.get('/api/Admin/Rent/UserHistory/{userId}')
-def rentuserinfoadmin(userId:int, Authorize: AuthJWT = Depends()):
+def rentUserInfoAdmin(userId:int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = AdminRent(userjwt)
@@ -417,7 +440,7 @@ def rentuserinfoadmin(userId:int, Authorize: AuthJWT = Depends()):
     return a
 
 @app.get('/api/Admin/Rent/TransportHistory/{transportId}')
-def renttrinfoadmin(transportId:int, Authorize: AuthJWT = Depends()):
+def renTtrInfoAdmin(transportId:int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = AdminRent(userjwt)
@@ -426,7 +449,7 @@ def renttrinfoadmin(transportId:int, Authorize: AuthJWT = Depends()):
 
 
 @app.post('/api/Admin/Rent')
-def addadminrent(base: BaseAdminRent, Authorize: AuthJWT = Depends()):
+def addAdminRent(base: BaseAdminRent, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = AdminRent(userjwt)
@@ -440,7 +463,7 @@ def addadminrent(base: BaseAdminRent, Authorize: AuthJWT = Depends()):
     )
 
 @app.post('/api/Admin/Rent/End/{rentid}')
-def endadminrent(rentid:int, lat:float, long:float, Authorize: AuthJWT = Depends()):
+def endAdminRent(rentid:int, lat:float, long:float, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = AdminRent(userjwt)
@@ -451,7 +474,7 @@ def endadminrent(rentid:int, lat:float, long:float, Authorize: AuthJWT = Depends
     )
 
 @app.put('/api/Admin/Rent/{id}')
-def putadminrentid(base:BaseAdminRent, id:int, Authorize: AuthJWT = Depends()):
+def putAdminRentId(base:BaseAdminRent, id:int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = AdminRent(userjwt)
@@ -465,7 +488,7 @@ def putadminrentid(base:BaseAdminRent, id:int, Authorize: AuthJWT = Depends()):
     )
 
 @app.delete('/api/Admin/Rent/{rentId}')
-def deladminrent(rentId:int, Authorize: AuthJWT = Depends()):
+def delAdminRent(rentId:int, Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     rent = AdminRent(userjwt)
