@@ -354,7 +354,18 @@ def newRent(rentType:Literal["Minutes", 'Days'], transportId:int, Authorize: Aut
     a = rent.rentnew(transportId, rentType)
     if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь или транспорт не найден"} )
     if a == 405: return JSONResponse( status_code=405, content={"msg":"Транспорт не может быть арендован или транспорт этого пользователя"} )
+    if a == 400: return JSONResponse( status_code=405, content={"msg":"Данный транспорт арендовать нельзя"} )
     return JSONResponse( status_code=200, content={"msg":"Аренда успешно добавлена"} )
+
+
+@app.get('/api/Rent/MyHistory', tags=["Rent"])    # ПОПРАВИТЬ, КОНФЛИКТ
+def getMyRentHistory(Authorize: AuthJWT = Depends()):
+    Authorize.jwt_required()
+    userjwt = Authorize.get_jwt_subject()
+    rent = Rent(userjwt)
+    a = rent.myhistory()
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь или аренда не найдены"} )
+    return a
 
 
 @app.get('/api/Rent/{rentId}', tags=["Rent"])
@@ -367,14 +378,7 @@ def getInfoRentId(rentId:int, Authorize: AuthJWT = Depends()):
     if a == 405: return JSONResponse( status_code=405, content={"msg":"Транспорт не этого пользователя"} )
     return a
 
-@app.get('/api/RentMyHistory', tags=["Rent"])    # ПОПРАВИТЬ, КОНФЛИКТ
-def getMyRentHistory(Authorize: AuthJWT = Depends()):
-    Authorize.jwt_required()
-    userjwt = Authorize.get_jwt_subject()
-    rent = Rent(userjwt)
-    a = rent.myhistory()
-    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь или аренда не найдены"} )
-    return a
+
 
 @app.get('/api/Rent/TransportHistory/{transportId}', tags=["Rent"])
 def getTrHistory(transportId:int, Authorize: AuthJWT = Depends()):

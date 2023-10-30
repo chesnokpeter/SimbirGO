@@ -460,6 +460,12 @@ class Rent():
         c.execute('SELECT "minutePrice" FROM "transport" WHERE "id" = %s', [transportId])
         a = c.fetchall()
         if not a: c.close(); return 401
+        if a[0]['minutePrice'] == None: c.close(); return 400
+
+        c.execute('SELECT "dayPrice" FROM "transport" WHERE "id" = %s', [transportId])
+        g = c.fetchall()
+        if not g: c.close(); return 401
+        if g[0]['dayPrice'] == None: c.close(); return 400
 
         c.execute('''INSERT INTO "rent" ("transportId", "userId", "timeStart", "priceOfUnit", "priceType") VALUES (%s, %s, %s, %s, %s)''', [transportId, id[0]['id'], datetime.datetime.now().isoformat(), a[0]['minutePrice'], rentType])
         conn.commit()
