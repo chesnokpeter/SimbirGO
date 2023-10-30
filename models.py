@@ -5,7 +5,12 @@ from pydantic import BaseModel
 from typing import Literal
 import datetime
 
-conn = psycopg2.connect(dbname='SimbirGO', user='postgres', password='', host='localhost')
+DATABASENAME = 'SimbirGO'
+USER = 'postgres'
+PASSWORD = ''
+HOST = 'localhost'
+
+conn = psycopg2.connect(dbname=DATABASENAME, user=USER, password=PASSWORD, host=HOST)
 
 c = conn.cursor()
 c.execute("""
@@ -479,8 +484,14 @@ class Rent():
         if not uid: c.close(); return 401
         c.execute('SELECT "userId" FROM "rent" WHERE id = %s', [rentId])
         rid = c.fetchall()
-        if not rid: return 401
-        if uid[0]['id'] != rid[0]['userId']: c.close(); return 405
+        if not rid: c.close(); return 401
+        c.execute('SELECT "transportId" FROM "rent" WHERE id = %s', [rentId])
+        tid = c.fetchall()
+        if not tid: c.close();return 401
+        c.execute('SELECT "ownerid" FROM "transport" WHERE id = %s', [tid[0]['transportId']])
+        tid = c.fetchall()
+        if not tid: c.close();return 405
+        if uid[0]['id'] != rid[0]['userId'] and uid[0]['id'] != tid[0]['ownerid']: c.close(); return 405
         c.execute('SELECT * FROM "rent" WHERE id = %s', [rentId])
         a = c.fetchall()
         c.close()
@@ -536,8 +547,6 @@ class Rent():
     
 
 
-
-
 class AdminRent():
     def __init__(self, user=None):
         self.user = user
@@ -564,16 +573,16 @@ class AdminRent():
         return a
 
     def inforenttr(self, transportId):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не является администратором', 401]
+        if not a or not a[0]['isAdmin']: c.close(); return 401
         c.execute('SELECT * FROM "rent" WHERE "transportId" = %s', [transportId])
         a = c.fetchall()
         c.close()
         return a
 
-    def addrent(self, transportId, # НЕ ТЕСТИРОВАЛИСЬ
+    def addrent(self, transportId, 
             userId, timeStart,
             timeEnd, priceOfUnit,
             priceType, finalPrice):
@@ -595,7 +604,7 @@ class AdminRent():
         c.close()
         return 200
     
-    def rentend(self, rentid, lat, long):  # НЕ ТЕСТИРОВАЛИСЬ
+    def rentend(self, rentid, lat, long):
         c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
@@ -627,7 +636,7 @@ class AdminRent():
     def putadminrentid(self, id, transportId, 
             userId, timeStart,
             timeEnd, priceOfUnit,
-            priceType, finalPrice):     # НЕ ТЕСТИРОВАЛИСЬ
+            priceType, finalPrice):   
         c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
@@ -650,7 +659,7 @@ class AdminRent():
         c.close()
         return 200
 
-    def deladminrent(self, id):     # НЕ ТЕСТИРОВАЛИСЬ
+    def deladminrent(self, id): 
         c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
