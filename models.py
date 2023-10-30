@@ -429,7 +429,7 @@ class Rent():
         self.user = user
 
     def rentrad(self, lat, long, radius, type):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         if type == 'ALL':
             c.execute('SELECT * FROM "transport" WHERE calculate_distance("latitude", "longitude", %s, %s) <= %s AND "canBeRented" = true', [lat, long, radius])
             a = c.fetchall()
@@ -441,83 +441,92 @@ class Rent():
         return a
     
     def rentnew(self, transportId, rentType):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "canBeRented" FROM "transport" WHERE id = %s', [transportId])
         b = c.fetchall()
-        if b[0] == 'false': c.close(); return ['Транспорт не может быть арендован', 401]
+        if not b: c.close();return 401
+        if b[0]['canBeRented'] == False: c.close(); return 405
 
         c.execute('SELECT "id" FROM "user" WHERE username = %s', [self.user])
         id = c.fetchall()
-        if not id: c.close(); return ['Пользователь не найден', 401]
-        c.execute('SELECT "id" FROM "transport" WHERE "ownerid" = %s', [id[0][0]])
+        if not id: c.close(); 401
+
+        c.execute('SELECT "id" FROM "transport" WHERE "ownerid" = %s', [id[0]['id']])
         a = c.fetchall()
-        if not a: c.close(); return ['Транспорт не найден', 401]
-        if a[0][0] == transportId: c.close(); return ['Транспорт этого пользователя', 401]
+        if not a: c.close(); return 401
+        for i in a:
+            if i['id'] == transportId: c.close(); return 405
+
         c.execute('SELECT "minutePrice" FROM "transport" WHERE "id" = %s', [transportId])
         a = c.fetchall()
-        if not a: c.close(); return ['Транспорт не найден', 401]
-        c.execute('''INSERT INTO "rent" ("transportId", "userId", "timeStart", "priceOfUnit", "priceType") VALUES (%s, %s, %s, %s, %s)''', [transportId, id[0], datetime.datetime.now().isoformat(), a[0], rentType])
+        if not a: c.close(); return 401
+
+        c.execute('''INSERT INTO "rent" ("transportId", "userId", "timeStart", "priceOfUnit", "priceType") VALUES (%s, %s, %s, %s, %s)''', [transportId, id[0]['id'], datetime.datetime.now().isoformat(), a[0]['minutePrice'], rentType])
         conn.commit()
         c.close()
-        return ['Аренда добавлена', 200]
+        return 200
 
     def inforentid(self, rentId):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "id" FROM "user" WHERE username = %s', [self.user])
         uid = c.fetchall()
-        if not uid: c.close(); return ['Пользователь не найден', 401]
+        if not uid: c.close(); return 401
         c.execute('SELECT "userId" FROM "rent" WHERE id = %s', [rentId])
         rid = c.fetchall()
-        if uid[0] != rid[0]: c.close(); return ['Аренда не этого пользователя', 401]
+        if not rid: return 401
+        if uid[0]['id'] != rid[0]['userId']: c.close(); return 405
         c.execute('SELECT * FROM "rent" WHERE id = %s', [rentId])
         a = c.fetchall()
         c.close()
         return a
 
     def myhistory(self):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "id" FROM "user" WHERE username = %s', [self.user])
         uid = c.fetchall()
-        if not uid: c.close(); return ['Пользователь не найден', 401]
+        if not uid: c.close(); return 401
 
-        c.execute('''SELECT * FROM "rent" WHERE "rent"."userId" = %s''', [uid[0][0]])
+        c.execute('''SELECT * FROM "rent" WHERE "rent"."userId" = %s''', [uid[0]['id']])
         a = c.fetchall()
         c.close()
         return a
     
     def trhistory(self, transportId):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "id" FROM "user" WHERE username = %s', [self.user])
         uid = c.fetchall()
-        if not uid: c.close(); return ['Пользователь не найден', 401]
+        if not uid: c.close(); return 401
 
         c.execute('''SELECT ownerid FROM "transport" WHERE id = %s''', [transportId])
         a = c.fetchall()
-        if not a: c.close(); return ['Транспорт не найден', 401]
-
-        if a[0][0] != uid[0][0]: c.close(); return ['Транспорт не этого пользователя', 401]
-        c.execute('''SELECT * FROM "transport" WHERE id = %s''', [transportId])
+        if not a: c.close(); return 404
+        if a[0]['ownerid'] != uid[0]['id']: c.close(); return 405
+        c.execute('''SELECT * FROM "rent" WHERE "rent"."transportId" = %s''', [transportId])
         a = c.fetchall()
         c.close()
         return a
     
     def rentend(self, rentid, lat, long):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "id" FROM "user" WHERE username = %s', [self.user])
         uid = c.fetchall()
-        if not uid: c.close(); return ['Пользователь не найден', 401]
+        if not uid: c.close(); 401
         c.execute('SELECT "userId" FROM "rent" WHERE id = %s', [rentid])
         a = c.fetchall()
-        if not a: c.close(); return ['Аренда не найдена', 401]
-        if a[0][0] != uid[0][0]: c.close(); return ['Аренда не этого пользователя', 401]
+        if not a: c.close(); return 404
+        if a[0]["userId"] != uid[0]["id"]: c.close(); return 405
         c.execute('SELECT "transportId" FROM "rent" WHERE id = %s', [rentid])
         tid = c.fetchall()
-        c.execute("""UPDATE "transport" SET latitude = %s, longitude = %s WHERE id = %s""", [lat, long, tid[0][0]])
+        c.execute('SELECT "ownerid" FROM "transport" WHERE id = %s', [tid[0]['transportId']])
+        ttest = c.fetchall()
+        if ttest[0]['ownerid'] != uid[0]['id']: c.close(); return 405
+
+        c.execute("""UPDATE "transport" SET latitude = %s, longitude = %s WHERE id = %s""", [lat, long, tid[0]['transportId']])
         conn.commit()
         c.execute("""UPDATE "rent" SET "timeEnd" = %s WHERE id = %s""", [datetime.datetime.now().isoformat(), rentid])
         conn.commit()
         c.close()
-        return ['Аренда завершена успешно', 200]
+        return 200
     
 
 
@@ -528,11 +537,10 @@ class AdminRent():
         self.user = user
 
     def inforentid(self, rentid):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не найден', 401]
-        if a != [(True,)]: c.close();return ['Пользователь не является администратором', 401]
+        if not a or not a[0]['isAdmin']: c.close(); return 401
 
         c.execute('SELECT * FROM rent WHERE id = %s', [rentid])
         a = c.fetchall()
@@ -540,10 +548,10 @@ class AdminRent():
         return a
     
     def inforentuser(self, userId):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не является администратором', 401]
+        if not a or not a[0]['isAdmin']: c.close(); return 401
         c.execute('SELECT * FROM "rent" WHERE "userId" = %s', [userId])
         a = c.fetchall()
         c.close()
@@ -563,56 +571,93 @@ class AdminRent():
             userId, timeStart,
             timeEnd, priceOfUnit,
             priceType, finalPrice):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не является администратором', 401]
+        if not a or not a[0]['isAdmin']: c.close(); return 401
+
+        c.execute('SELECT "id" FROM "transport" WHERE id = %s', [transportId])
+        a = c.fetchall()
+        if not a: c.close(); return 404
+
+        c.execute('SELECT "id" FROM "user" WHERE id = %s', [userId])
+        a = c.fetchall()
+        if not a: c.close(); return 404
+
         c.execute('''INSERT INTO "rent" ("transportId", "userId", "timeStart", "timeEnd", "priceOfUnit", "priceType", "finalPrice") VALUES (%s, %s, %s, %s, %s, %s, %s)''', [transportId, userId, timeStart, timeEnd, priceOfUnit, priceType, finalPrice])
         conn.commit()
         c.close()
-        return ['Аренда добавлена успешно', 200]
+        return 200
     
     def rentend(self, rentid, lat, long):  # НЕ ТЕСТИРОВАЛИСЬ
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не является администратором', 401]
+        if not a or not a[0]['isAdmin']: c.close(); return 401
+
         c.execute('SELECT "transportId" FROM "rent" WHERE id = %s', [rentid])
         tid = c.fetchall()
-        c.execute("""UPDATE "transport" SET latitude = %s, longitude = %s WHERE id = %s""", [lat, long, tid[0][0]])
+        if not tid: c.close(); return 404
+
+        c.execute('SELECT "id" FROM "transport" WHERE id = %s', [tid[0]['transportId']])
+        a = c.fetchall()
+        if not a: c.close(); return 404
+
+        c.execute('SELECT "userId" FROM "rent" WHERE id = %s', [rentid])
+        a = c.fetchall()
+        if not a: c.close(); return 404
+
+        c.execute('SELECT "id" FROM "user" WHERE id = %s', [a[0]['userId']])
+        a = c.fetchall()
+        if not a: c.close(); return 404
+
+        c.execute("""UPDATE "transport" SET latitude = %s, longitude = %s WHERE id = %s""", [lat, long, tid[0]['transportId']])
         conn.commit()
         c.execute("""UPDATE "rent" SET "timeEnd" = %s WHERE id = %s""", [datetime.datetime.now().isoformat(), rentid])
         conn.commit()
         c.close()
-        return ['Аренда завершена успешно', 200]
+        return 200
     
     def putadminrentid(self, id, transportId, 
             userId, timeStart,
             timeEnd, priceOfUnit,
             priceType, finalPrice):     # НЕ ТЕСТИРОВАЛИСЬ
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не является администратором', 401]
+        if not a or not a[0]['isAdmin']: c.close(); return 401
+
+        c.execute('SELECT "id" FROM "transport" WHERE id = %s', [transportId])
+        a = c.fetchall()
+        if not a: c.close(); return 404
+
+        c.execute('SELECT "id" FROM "user" WHERE id = %s', [userId])
+        a = c.fetchall()
+        if not a: c.close(); return 404
+
+        c.execute('SELECT "id" FROM "rent" WHERE id = %s', [id])
+        a = c.fetchall()
+        if not a: c.close(); return 404
 
         c.execute("""UPDATE "rent" SET "transportId" = %s, "userId" = %s, "timeStart" = %s, "timeEnd" = %s, "priceOfUnit" = %s, "priceType" = %s, "finalPrice" = %s WHERE id = %s""", [transportId, userId, timeStart, timeEnd, priceOfUnit, priceType, finalPrice, id])
         conn.commit()
         c.close()
-        return ['Аренда завершена изменена', 200]
+        return 200
 
     def deladminrent(self, id):     # НЕ ТЕСТИРОВАЛИСЬ
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не найден', 401]
-        if a != [(True,)]:
-            c.close()
-            return ['Пользователь не является администратором', 401]
+        if not a or not a[0]['isAdmin']: c.close(); return 401
+
+        c.execute('SELECT "id" FROM "rent" WHERE id = %s', [id])
+        a = c.fetchall()
+        if not a: c.close(); return 404
 
         c.execute('DELETE FROM "rent" WHERE id = %s', [id])
         conn.commit()
         c.close()
-        return ['Аренда успешно удалена', 200]
+        return 200
     
 
 
