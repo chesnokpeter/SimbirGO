@@ -2,7 +2,7 @@
 ` pip install -r requirements.txt`
 
 # Settings
-### Настройка соединения с сервером происходит в models.py:7
+### Настройка соединения с сервером происходит в models.py:13
 # Start
 `uvicorn main:app --reload`
 # Swagger URL
