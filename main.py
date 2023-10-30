@@ -191,28 +191,15 @@ def addAdminUser(Authorize: AuthJWT = Depends(), id:int=0):
     if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
     return JSONResponse( status_code=200, content={"msg":"Сущность удалена успешно"} )
 
-
-
-
-
-
-
-
-@app.post('/api/Payment/Hesoyam/{accountId}')     # НЕДОДЕЛАННЫЙ
+@app.post('/api/Payment/Hesoyam/{accountId}')    
 def hesoyam(Authorize: AuthJWT = Depends(), accountId:int=0):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     adminuser = AdminUser(userjwt)
     a = adminuser.addbalance(accountId)
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
-
-
-
-
-
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
+    if a == 404: return JSONResponse( status_code=404, content={"msg":"Пользователь не найден"} )
+    return JSONResponse( status_code=200, content={"msg":"Денежные единицы добавлены успешно"} )
 
 @app.get('/api/Transport/{id}')
 def getTransport(id:int):
@@ -275,28 +262,13 @@ def addTransport(base: BaseTransport, Authorize: AuthJWT = Depends()):
     return a
 
 
-
-
-
-
-
-
-
-#ВОТ ТУТ Я ОСТАНОВИЛСЯ
-
-
-
-
-
-
-
-
 @app.get('/api/Admin/Transport')
 def adminTransportList(start: int = 0, count: int = 10, transportType:str = 'ALL', Authorize: AuthJWT = Depends()):
     Authorize.jwt_required()
     userjwt = Authorize.get_jwt_subject()
     tr = AdminTransport(userjwt)
     a = tr.admintrlist(start, count, transportType)
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
     return a
 
 @app.get('/api/Admin/Transport/{id}')
@@ -305,10 +277,9 @@ def adminTrById(id: int = 0, Authorize: AuthJWT = Depends()):
     userjwt = Authorize.get_jwt_subject()
     tr = AdminTransport(userjwt)
     a = tr.admintrbyid(id)
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
+    return a
+
 
 @app.post('/api/Admin/Transport')
 def adminAddTransport(base: BaseAdminTransport, Authorize: AuthJWT = Depends()):
@@ -328,10 +299,9 @@ def adminAddTransport(base: BaseAdminTransport, Authorize: AuthJWT = Depends()):
             base.minutePrice, 
             base.dayPrice,
         )
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
+    if a == 404: return JSONResponse( status_code=404, content={"msg":"Пользователь не найден"} )
+    return JSONResponse( status_code=200, content={"msg":"Транспорт добавлен успешно"} )
 
 
 @app.put('/api/Admin/Transport/{id}')
@@ -353,10 +323,10 @@ def adminEditTransport(base: BaseAdminTransport, Authorize: AuthJWT = Depends(),
             base.dayPrice,
             id
         )
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
+    if a == 404: return JSONResponse( status_code=404, content={"msg":"Пользователь или транспорт не найден"} )
+    return JSONResponse( status_code=200, content={"msg":"Транспорт успешно обновлен"} )
+
 
 @app.delete('/api/Admin/Transport/{id}')
 def adminDeleteTransport(Authorize: AuthJWT = Depends(), id:int=0):
@@ -364,10 +334,34 @@ def adminDeleteTransport(Authorize: AuthJWT = Depends(), id:int=0):
     userjwt = Authorize.get_jwt_subject()
     tr = AdminTransport(userjwt)
     a = tr.deletetransportbyid(id)
-    return JSONResponse(
-        status_code=a[1],
-        content=a[0]
-    )
+    if a == 401: return JSONResponse( status_code=401, content={"msg":"Пользователь не является администратором или не найден"} )
+    if a == 404: return JSONResponse( status_code=404, content={"msg":"Транспорт не найден"} )
+    return JSONResponse( status_code=200, content={"msg":"Транспорт успешно удалён"} )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ОСТАНОВКА ЗДЕСЬ
+
+
+
+
+
+
+
+
+
+
 
 
 @app.get('/api/Rent/Transport')

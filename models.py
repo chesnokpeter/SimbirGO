@@ -238,33 +238,32 @@ class AdminUser():
     
 
     def addbalance(self, accountId):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.username])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не найден', 401]
-        if a != [(True,)]:
+        if not a or a[0]['isAdmin'] == False: c.close(); return 401
+        if not a[0]['isAdmin']:
             c.execute('SELECT "isAdmin" FROM "user" WHERE id = %s', [accountId])
             a = c.fetchall()
-            if not a: c.close(); return ['Пользователь не найден', 401]
+            if not a: c.close(); return 404
             c.execute('SELECT "id" FROM "user" WHERE username = %s', [self.username])
             a = c.fetchall()
-            if a[0][0] == accountId:
+            if a[0]['id'] == accountId:
                 c.execute('SELECT "balance"::float FROM "user" WHERE id = %s', [accountId])
                 b = c.fetchall()
                 if not b: c.close(); return ['Пользователь не найден', 401]
-                c.execute("""UPDATE "user" SET balance = %s WHERE id = %s""", [b[0][0] + float(250000), accountId])
+                c.execute("""UPDATE "user" SET balance = %s WHERE id = %s""", [b[0]['balance'] + float(250000), accountId])
                 conn.commit()
                 c.close()
-                return ['Денежные единицы успешно добавлены', 200]
-            else: c.close(); return ['Пользователь и id не совпадает', 401]
+                return 200
+            else: c.close(); return 404
         c.execute('SELECT "balance"::float FROM "user" WHERE id = %s', [accountId])
         b = c.fetchall()
-        if not b: c.close(); return ['Пользователь не найден', 401]
-        print(b[0])
-        c.execute("""UPDATE "user" SET balance = %s WHERE id = %s""", [b[0][0] + float(250000), accountId])
+        if not b: c.close(); return 404
+        c.execute("""UPDATE "user" SET balance = %s WHERE id = %s""", [b[0]['balance'] + float(250000), accountId])
         conn.commit()
         c.close()
-        return ['Денежные единицы успешно добавлены', 200]
+        return 200
 
 
 
@@ -341,33 +340,27 @@ class AdminTransport():
         self.user = user
 
     def admintrlist(self, start, count, transportType):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return 'Пользователь не найден'
-        if a == [(True,)]:
-            if transportType == 'ALL':
-                c.execute('SELECT * FROM "transport" ORDER BY id LIMIT %s OFFSET %s', [count, start])
-                a = c.fetchall()
-                c.close()
-                return a
-
-            c.execute('SELECT * FROM "transport" WHERE "transportType" = %s ORDER BY id LIMIT %s OFFSET %s', [transportType, count, start])
+        if not a or a != [RealDictRow([('isAdmin', True)])]: c.close(); return 401
+        if transportType == 'ALL':
+            c.execute('SELECT * FROM "transport" ORDER BY id LIMIT %s OFFSET %s', [count, start])
             a = c.fetchall()
             c.close()
             return a
         else:
+            c.execute('SELECT * FROM "transport" WHERE "transportType" = %s ORDER BY id LIMIT %s OFFSET %s', [transportType, count, start])
+            a = c.fetchall()
             c.close()
-            return 'Пользователь не является администратором'
+            return a
+
         
     def admintrbyid(self, id):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не найден', 401]
-        if a != [(True,)]:
-            c.close()
-            return ['Пользователь не является администратором', 401]
+        if not a or a != [RealDictRow([('isAdmin', True)])]: c.close(); return 401
         c.execute('SELECT * FROM "transport" WHERE id = %s', [id])
         a = c.fetchall()
         c.close()
@@ -379,17 +372,18 @@ class AdminTransport():
             description: str, latitude: float,
             longitude: float, minutePrice: float,
             dayPrice: float):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не найден', 401]
-        if a != [(True,)]:
-            c.close()
-            return ['Пользователь не является администратором', 401]
+        if not a or a != [RealDictRow([('isAdmin', True)])]: c.close(); return 401
+        c.execute('SELECT * FROM "user" WHERE id = %s', [ownerid])
+        a = c.fetchall()
+        if not a: return 404
+
         c.execute('''INSERT INTO "transport" ("ownerid", "canBeRented", "transportType", "model", "color", "identifier", "description", "latitude", "longitude", "minutePrice", "dayPrice") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''', [ownerid, canBeRented, transportType, model, color, identifier, description, latitude, longitude, minutePrice, dayPrice])
         conn.commit()
         c.close()
-        return ['Транспорт успешно зарегестрирован', 200]
+        return 200
     
     def edittransport(self, ownerid: int, canBeRented,
             transportType: str, model: str,
@@ -397,33 +391,33 @@ class AdminTransport():
             description: str, latitude: float,
             longitude: float, minutePrice: float,
             dayPrice: float, id:int):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не найден', 401]
-        if a != [(True,)]:
-            c.close()
-            return ['Пользователь не является администратором', 401]
-
+        if not a or a != [RealDictRow([('isAdmin', True)])]: c.close(); return 401
+        c.execute('SELECT * FROM "user" WHERE id = %s', [ownerid])
+        a = c.fetchall()
+        if not a: return 404
+        c.execute('SELECT * FROM "transport" WHERE id = %s', [id])
+        a = c.fetchall()
+        if not a: return 404
         c.execute('''UPDATE "transport" SET "ownerid" = %s, "canBeRented" = %s, "transportType" = %s, "model" = %s, "color" = %s, "identifier" = %s, "description" = %s, "latitude" = %s, "longitude" = %s, "minutePrice" = %s, "dayPrice" = %s WHERE "id" = %s''', [ownerid, canBeRented, transportType, model, color, identifier, description, latitude, longitude, minutePrice, dayPrice, id])
         conn.commit()
         c.close()
-
-        return ['Транспорт успешно обновлен', 200]
+        return 200
     
     def deletetransportbyid(self, id):
-        c = conn.cursor()
+        c = conn.cursor(cursor_factory=RealDictCursor)
         c.execute('SELECT "isAdmin" FROM "user" WHERE username = %s', [self.user])
         a = c.fetchall()
-        if not a: c.close(); return ['Пользователь не найден', 401]
-        if a != [(True,)]:
-            c.close()
-            return ['Пользователь не является администратором', 401]
-
+        if not a or a != [RealDictRow([('isAdmin', True)])]: c.close(); return 401
+        c.execute('SELECT * FROM "transport" WHERE id = %s', [id])
+        a = c.fetchall()
+        if not a: return 404
         c.execute('DELETE FROM "transport" WHERE id = %s', [id])
         conn.commit()
         c.close()
-        return ['Транспорт успешно удалён', 200]
+        return 200
     
 
 
